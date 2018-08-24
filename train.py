@@ -80,7 +80,7 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, encoder, decoder, s_vo
                 batch_t_t.append(train_tgts[idx])
 
             batch_src_len = [len(s) + 1 for s in batch_t_s]  # 各バッチの長さ（<EOS>のインデックス + 1）を記録
-            # TODO: 各バッチの長さを使って<EOS>タグが入力されたときの隠れ層を取得できるようにする
+            # TODO: 各バッチの長さを使って<EOS>タグが入力されたときの隠れ層を取得できるようにしたい
             max_s_len = max(batch_src_len)
             max_t_len = max(len(s) + 1 for s in batch_t_t)
             # バッチの中で一番長い文に合わせてpadding

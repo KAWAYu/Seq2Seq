@@ -22,12 +22,13 @@ def parse():
     parser.add_argument('--vocab_size', '-vs', default=50000)
     parser.add_argument('--embed_size', '-es', default=256)
     parser.add_argument('--hidden_size', '-hs', default=256)
+    parser.add_argument('--reverse', '-r', action='store_true', default=False)
 
     args = parser.parse_args()
     return args
 
 
-def translate(src, encoder, decoder, s_vocab, t_vocab, output, device, max_len):
+def translate(src, encoder, decoder, s_vocab, t_vocab, output, device, max_len, reverse=False):
     t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
     with open(src, encoding='utf-8') as fin, open(output, 'w', encoding='utf-8') as fout:
         input_sequences = []
@@ -37,7 +38,12 @@ def translate(src, encoder, decoder, s_vocab, t_vocab, output, device, max_len):
                 continue
             max_s_len = max(len(s) for s in input_sequences)
             for j in range(len(input_sequences)):
-                input_sequences[j] = input_sequences[j] + [s_vocab['<EOS>']] * (max_s_len - len(input_sequences[j]))
+                if reverse:
+                    input_sequences[j] = (input_sequences[j] +
+                                          [s_vocab['<EOS>']] * (max_s_len - len(input_sequences[j])))[::-1]
+                else:
+                    input_sequences[j] = (input_sequences[j] +
+                                          [s_vocab['<EOS>']] * (max_s_len - len(input_sequences[j])))
 
             encoder_hidden = encoder.init_hidden(100, device)
             xs = torch.tensor(input_sequences).to(device)
@@ -109,7 +115,7 @@ def main():
     decoder = model.Decoder(vs, es, hs)
     encoder.load_state_dict(torch.load(args.model_prefix + '.enc'))
     decoder.load_state_dict(torch.load(args.model_prefix + '.dec'))
-    translate(args.src, encoder, decoder, s_vocab, t_vocab, args.output, device, 100)
+    translate(args.src, encoder, decoder, s_vocab, t_vocab, args.output, device, 100, reverse=args.reverse)
 
 
 if __name__ == '__main__':
