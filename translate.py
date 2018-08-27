@@ -5,7 +5,7 @@ from io import open
 import pickle
 import torch
 
-import model
+import models
 
 device = torch.device('cpu')
 
@@ -111,11 +111,9 @@ def main():
     s_vocab = pickle.load(open(args.s_vocab, 'rb'))
     t_vocab = pickle.load(open(args.t_vocab, 'rb'))
     vs, es, hs = args.vocab_size, args.embed_size, args.hidden_size
-    encoder = model.Encoder(vs, es, hs)
-    decoder = model.Decoder(vs, es, hs)
-    encoder.load_state_dict(torch.load(args.model_prefix + '.enc'))
+    model = models.EncoderDecoder()
     decoder.load_state_dict(torch.load(args.model_prefix + '.dec'))
-    translate(args.src, encoder, decoder, s_vocab, t_vocab, args.output, device, 100, reverse=args.reverse)
+    translate(args.src, model, s_vocab, t_vocab, args.output, device, 100, reverse=args.reverse)
 
 
 if __name__ == '__main__':

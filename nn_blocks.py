@@ -5,14 +5,15 @@ import torch.nn as nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1):
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1, bidirectional=False):
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.is_bidirectional = bidirectional
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.e2h = nn.Linear(embed_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers, batch_first=True)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
 
     def forward(self, xs, prev_hidden):
         h = torch.tanh(self.e2h(self.embedding(xs)))  # (batch_size, seq_len) => (batch_size, seq_len, hidden_size)
@@ -20,7 +21,8 @@ class Encoder(nn.Module):
         return hidden
 
     def init_hidden(self, batch_size, device):
-        return torch.zeros(self.num_layers, batch_size, self.hidden_size, device=device)
+        direction = 2 if self.is_bidirectional else 1
+        return torch.zeros(self.num_layers * direction, batch_size, self.hidden_size, device=device)
 
 
 class Decoder(nn.Module):
@@ -42,11 +44,10 @@ class Decoder(nn.Module):
 
 
 class AttentionDecoder(nn.Module):
-    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1, bidirectional=True):
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=1):
         super(AttentionDecoder, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.bidirectional = bidirectional
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.e2h = nn.Linear(embed_size, hidden_size)
@@ -68,3 +69,18 @@ class AttentionDecoder(nn.Module):
 
     def init_hidden(self, batch_size, device):
         return torch.zeros(1, batch_size, self.hidden_size, device=device)
+
+
+class ConvBlock(nn.Module):
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers=5, residual=True):
+        raise NotImplementedError('Sorry, this implementation is future work.')
+        super(ConvBlock, self).__init__()
+        self.hidden_size = hidden_size
+        self.is_residual = residual
+
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.e2h = nn.Linear(embed_size, hidden_size)
+        self.conv = nn.Conv2d(1, 1, (3, hidden_size), 1, 1)
+
+    def forward(self, xs, ys, device):
+        pass

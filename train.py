@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pickle
 
-import model
+import models
 import my_utils as utils
 
 device = torch.device('cpu')
@@ -29,14 +29,14 @@ def parse():
     parser.add_argument('--epochs', '-e', default=10, type=int, help='the number of epochs')
     parser.add_argument('--batch_size', '-bs', default=200, type=int, help='batch size')
     parser.add_argument('--gpu_id', '-g', default=-1, type=int, help='GPU id you want to use')
-    parser.add_argument('--model_prefix', '-mf', default='model', help='prefix of model name')
+    parser.add_argument('--model_prefix', '-mf', default='encdec', help='prefix of model name')
     parser.add_argument('--reverse', '-r', action='store_true', default=False, help='reverse order of input sequences')
 
     args = parser.parse_args()
     return args
 
 
-def train(train_srcs, train_tgts, valid_srcs, valid_tgts, encoder, decoder, s_vocab, t_vocab,
+def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_vocab,
           num_epochs, batch_size, device, reverse=True):
     """
     訓練する関数
@@ -54,10 +54,6 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, encoder, decoder, s_vo
     :return tuple(train_loss, dev_loss): 訓練データでの各エポックでのロス、開発データでの各エポックでのロス
     """
 
-    # 学習率最適化手法
-    encoder_optim = torch.optim.Adam(encoder.parameters(), weight_decay=1e-5)
-    decoder_optim = torch.optim.Adam(decoder.parameters(), weight_decay=1e-5)
-
     criterion = torch.nn.CrossEntropyLoss()  # 損失関数
 
     t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
@@ -70,8 +66,6 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, encoder, decoder, s_vo
         random.shuffle(indexes)                        # 順番をシャッフル
         k = 0  # 何文処理をしたかを格納するカウンタ変数
         while k < len(indexes):
-            encoder_optim.zero_grad(), decoder_optim.zero_grad()  # 勾配をリセット
-            batch_loss = 0
             batch_idx = indexes[k: min(k + batch_size, len(indexes))]  # batch_size分のインデックスを取り出し
             batch_t_s, batch_t_t = [], []
             # バッチ処理用の文対をまとめる
@@ -91,47 +85,31 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, encoder, decoder, s_vo
                     batch_t_s[i] = (batch_t_s[i] + [s_vocab['<EOS>']] * (max_s_len - len(batch_t_s[i])))
                 batch_t_t[i] = batch_t_t[i] + [t_vocab['<EOS>']] * (max_t_len - len(batch_t_t[i]))
 
-            encoder_init_hidden = encoder.init_hidden(len(batch_idx), device)
             xs = torch.tensor(batch_t_s).to(device)
-            ehs = encoder(xs, encoder_init_hidden)
-
             ys = torch.tensor(batch_t_t).to(device)
-            dhidden = ehs  # encoder側の最後の隠れ層をdecoderの隠れ層の初期値に
-            pred_words = torch.tensor([[t_vocab['<BOS>']] for _ in range(len(batch_idx))]).to(device)
-            pred_seq = [[] for _ in range(len(batch_idx))]
-            for j in range(max_t_len - 1):
-                preds, dhidden = decoder(pred_words, dhidden)
-                _, topi = preds.topk(1)
-                batch_loss += criterion(preds, ys[:, j])
-                pred_words = ys[:, j + 1].view(-1, 1)
-                for i in range(len(pred_seq)):
-                    pred_seq[i].append(topi[i])
-            i = random.randrange(0, len(batch_idx))
-            print(' '.join(t_vocab_list[t] for t in batch_t_t[i]))
-            print(' '.join(t_vocab_list[t] if t < len(t_vocab_list) else t_vocab_list[0] for t in pred_seq[i]))
+            batch_loss = model(xs, ys, criterion, device)
+
+            # i = random.randrange(0, len(batch_idx))
+            # print(' '.join(t_vocab_list[t] for t in batch_t_t[i]))
+            # print(' '.join(t_vocab_list[t] if t < len(t_vocab_list) else t_vocab_list[0] for t in pred_seq[i]))
 
             total_loss += batch_loss.item()
-            batch_loss.backward()
-            decoder_optim.step()
-            encoder_optim.step()
             k += len(batch_idx)
             print('\r%d sentences was learned, loss %.4f' % (k, batch_loss.item()), end='')
         print()
         train_losses.append(total_loss)
-        dev_loss = dev_evaluate(valid_srcs, valid_tgts, encoder, decoder, s_vocab, t_vocab, device, reverse=reverse)
+        dev_loss = dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=reverse)
         dev_losses.append(dev_loss)
         print('train loss: %.6f, valid loss: %.6f' % (total_loss, dev_loss))
     return train_losses, dev_losses
 
 
-def dev_evaluate(valid_srcs, valid_tgts, encoder, decoder, s_vocab, t_vocab, device, reverse=True):
+def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=True):
     k = 0
     dev_sum_loss = 0
     criterion = torch.nn.CrossEntropyLoss()
     step_size = 50
-    t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
     while k < len(valid_srcs):
-        dev_loss = 0
         max_s_len = max(len(s) + 1 for s in valid_srcs[k: min(k + step_size, len(valid_srcs))])
         max_t_len = max(len(s) + 1 for s in valid_tgts[k: min(k + step_size, len(valid_srcs))])
         valid_batch_source, valid_batch_target = [], []
@@ -142,27 +120,11 @@ def dev_evaluate(valid_srcs, valid_tgts, encoder, decoder, s_vocab, t_vocab, dev
                 valid_batch_source.append(valid_srcs[i] + [s_vocab['<EOS>']] * (max_s_len - len(valid_srcs[i])))
             valid_batch_target.append(valid_tgts[i] + [t_vocab['<EOS>']] * (max_t_len - len(valid_tgts[i])))
 
-        batch_size = len(valid_batch_source)
-        encoder_init_hidden = encoder.init_hidden(batch_size, device)
         xs = torch.tensor(valid_batch_source).to(device)
-        ehs = encoder(xs, encoder_init_hidden)
-
         ys = torch.tensor(valid_batch_target).to(device)
-        dhidden = ehs
-        pred_words = torch.tensor([[t_vocab['<BOS>']] for _ in range(batch_size)]).to(device)
-        pred_seq = []
-        i = random.randrange(0, len(valid_batch_source))
-        for j in range(max_t_len - 1):
-            preds, dhidden = decoder(pred_words, dhidden)
-            _, topi = preds.topk(1)
-            dev_loss += criterion(preds, ys[:, j])
-            pred_words = ys[:, j + 1].view(-1, 1)
-            pred_seq.append(topi[i])
-        dev_sum_loss += dev_loss.item()
-        k += step_size
-        print('development data evaluate:')
-        print('\t' + ' '.join(t_vocab_list[t] for t in valid_batch_target[i]))
-        print('\t' + ' '.join(t_vocab_list[t] if t < len(t_vocab_list) else t_vocab_list[0] for t in pred_seq))
+        batch_loss = model(xs, ys, criterion, device)
+
+        dev_sum_loss += batch_loss.item()
     return dev_sum_loss
 
 
@@ -195,17 +157,15 @@ def main():
             valid_target_seqs.append(
                 [t_vocab[t] if t in t_vocab else t_vocab['<UNK>'] for t in line.strip().split(' ')])
 
-    encoder = model.Encoder(args.vocab_size, args.embed_size, args.hidden_size)
-    decoder = model.Decoder(args.vocab_size, args.embed_size, args.hidden_size)
+    model = models.EncoderDecoder(args.vocab_size, args.embed_size, args.hidden_size)
     train_losses, valid_losses = train(
-        train_source_seqs, train_target_seqs, valid_source_seqs, valid_target_seqs, encoder, decoder,
+        train_source_seqs, train_target_seqs, valid_source_seqs, valid_target_seqs, model,
         s_vocab, t_vocab, args.epochs, args.batch_size, device, args.reverse)
 
     # テストデータの翻訳に必要な各データを出力
     pickle.dump(s_vocab, open('s_vocab.pkl', 'wb'))
     pickle.dump(t_vocab, open('t_vocab.pkl', 'wb'))
-    torch.save(encoder.state_dict(), args.model_prefix + '.enc')
-    torch.save(decoder.state_dict(), args.model_prefix + '.dec')
+    torch.save(model.state_dict(), args.model_prefix + '.model')
 
     plt.plot(np.array([i for i in range(1, len(train_losses) + 1)]), train_losses, label='train loss')
     plt.plot(np.array([i for i in range(1, len(valid_losses) + 1)]), valid_losses, label='valid loss')
