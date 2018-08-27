@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pickle
+import sys
 
 import models
 import my_utils as utils
@@ -30,22 +31,22 @@ def parse():
     parser.add_argument('--batch_size', '-bs', default=200, type=int, help='batch size')
     parser.add_argument('--gpu_id', '-g', default=-1, type=int, help='GPU id you want to use')
     parser.add_argument('--model_prefix', '-mf', default='encdec', help='prefix of model name')
+    parser.add_argument('--model_type', '-mt', default='EncDec', help='Model type(`EncDec` or `Attn`)')
     parser.add_argument('--reverse', '-r', action='store_true', default=False, help='reverse order of input sequences')
 
     args = parser.parse_args()
     return args
 
 
-def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_vocab,
-          num_epochs, batch_size, device, reverse=True):
+def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_vocab, num_epochs,
+          batch_size, device, reverse=True):
     """
     訓練する関数
     :param train_srcs: 原言語の訓練データ
     :param train_tgts: 目的言語の訓練データ
     :param valid_srcs: 原言語の開発データ
     :param valid_tgts: 目的言語の開発データ
-    :param encoder: エンコーダ側のモデル
-    :param decoder: デコーダ側のモデル
+    :param model: ニューラルネットのモデル
     :param s_vocab: 原言語側の語彙辞書 (語彙 -> ID)
     :param t_vocab: 目的言語の語彙辞書 (語彙 -> ID)
     :param num_epochs: エポック数
@@ -85,6 +86,7 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
                     batch_t_s[i] = (batch_t_s[i] + [s_vocab['<EOS>']] * (max_s_len - len(batch_t_s[i])))
                 batch_t_t[i] = batch_t_t[i] + [t_vocab['<EOS>']] * (max_t_len - len(batch_t_t[i]))
 
+            # 訓練は「入力シーケンス」と「出力シーケンス」を渡すだけ（中で重みの更新までする）
             xs = torch.tensor(batch_t_s).to(device)
             ys = torch.tensor(batch_t_t).to(device)
             batch_loss = model(xs, ys, criterion, device)
@@ -125,6 +127,7 @@ def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, revers
         batch_loss = model(xs, ys, criterion, device)
 
         dev_sum_loss += batch_loss.item()
+        k += step_size
     return dev_sum_loss
 
 
@@ -157,7 +160,17 @@ def main():
             valid_target_seqs.append(
                 [t_vocab[t] if t in t_vocab else t_vocab['<UNK>'] for t in line.strip().split(' ')])
 
-    model = models.EncoderDecoder(args.vocab_size, args.embed_size, args.hidden_size)
+    if args.model_type == 'EncDec':
+        model = models.EncoderDecoder(s_vocab_size=args.vocab_size, t_vocab_size=args.vocab_size,
+                                      embed_size=args.embed_size, hidden_size=args.hidden_size,
+                                      weight_decay=1e-5)
+    elif args.model_type == 'Attn':
+        model = models.AttentionSeq2Seq(s_vocab_size=args.vocab_size, t_vocab_size=args.vocab_size,
+                                        embed_size=args.embed_size, hidden_size=args.hidden_size,
+                                        num_s_layers=2, bidirectional=True, weight_decay=1e-5)
+    else:
+        sys.stderr.write('%s is not found. Model type is `EncDec` or `Attn`.' % args.model_type)
+
     train_losses, valid_losses = train(
         train_source_seqs, train_target_seqs, valid_source_seqs, valid_target_seqs, model,
         s_vocab, t_vocab, args.epochs, args.batch_size, device, args.reverse)

@@ -13,8 +13,8 @@ class EncoderDecoder(nn.Module):
         self.target_vocab_size = kwargs['t_vocab_size']
         self.hidden_size = kwargs['hidden_size']
         self.embed_size = kwargs['embed_size']
-        self.num_source_layers = kwargs['num_s_layers']
-        self.num_target_layers = kwargs['num_t_layers']
+        self.num_source_layers = kwargs['num_s_layers'] if 'num_s_layers' in kwargs else 1
+        self.num_target_layers = kwargs['num_t_layers'] if 'num_t_layers' in kwargs else 1
         self.weight_decay = kwargs['weight_decay']
 
         self.encoder = nn_blocks.Encoder(
@@ -69,8 +69,8 @@ class AttentionSeq2Seq(nn.Module):
         self.target_vocab_size = kwargs['t_vocab_size']
         self.hidden_size = kwargs['hidden_size']
         self.embed_size = kwargs['embed_size']
-        self.num_source_layers = kwargs['num_s_layers']
-        self.num_target_layers = kwargs['num_t_layers']
+        self.num_source_layers = kwargs['num_s_layers'] if 'num_s_layers' in kwargs else 1
+        self.num_target_layers = kwargs['num_t_layers'] if 'num_t_layers' in kwargs else 1
         self.is_bidirectional = kwargs['bidirectional']
         self.weight_decay = kwargs['weight_decay']
 
