@@ -29,7 +29,7 @@ def parse():
     parser.add_argument('--hidden_size', '-hs', default=256, type=int, help='hidden layer size')
     parser.add_argument('--epochs', '-e', default=10, type=int, help='the number of epochs')
     parser.add_argument('--batch_size', '-bs', default=200, type=int, help='batch size')
-    parser.add_argument('--gpu_id', '-g', default=-1, type=int, help='GPU id you want to use')
+    parser.add_argument('--gpu_id', '-g', nargs='*', default=None, type=int, help='GPU id you want to use')
     parser.add_argument('--model_prefix', '-mf', default='encdec', help='prefix of model name')
     parser.add_argument('--model_type', '-mt', default='EncDec', help='Model type(`EncDec` or `Attn`)')
     parser.add_argument('--reverse', '-r', action='store_true', default=False, help='reverse order of input sequences')
@@ -136,8 +136,8 @@ def main():
     train_source_seqs, train_target_seqs = [], []
     valid_source_seqs, valid_target_seqs = [], []
 
-    if args.gpu_id >= 0 and torch.cuda.is_available():
-        device = torch.device('cuda:' + str(args.gpu_id))
+    if args.gpu_id is not None and torch.cuda.is_available():
+        device = torch.device('cuda:' + args.gpu_id[0])
 
     # ファイルを全てID列に変換
     with open(args.train_src, encoding='utf-8') as fin:
@@ -167,6 +167,9 @@ def main():
                                         num_s_layers=2, bidirectional=True, weight_decay=1e-5).to(device)
     else:
         sys.stderr.write('%s is not found. Model type is `EncDec` or `Attn`.' % args.model_type)
+
+    if len(args.gpu_id) > 1:
+        model = torch.nn.DataParallel(model, device_ids=args.gpu_id)
 
     train_losses, valid_losses = train(
         train_source_seqs, train_target_seqs, valid_source_seqs, valid_target_seqs, model,
