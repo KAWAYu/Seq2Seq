@@ -51,13 +51,14 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
     :param t_vocab: 目的言語の語彙辞書 (語彙 -> ID)
     :param num_epochs: エポック数
     :param batch_size: バッチ数
-    :param device: CPUかGPUの指定
+    :param device: CPUかGPUの指定(torch.device)
+    :param reverse: 入力を逆順にするかのフラグ
     :return tuple(train_loss, dev_loss): 訓練データでの各エポックでのロス、開発データでの各エポックでのロス
     """
 
     criterion = torch.nn.CrossEntropyLoss()  # 損失関数
 
-    t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
+    # t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
     train_losses, dev_losses = [], []
 
     for e in range(1, num_epochs + 1):
@@ -90,10 +91,6 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
             xs = torch.tensor(batch_t_s).to(device)
             ys = torch.tensor(batch_t_t).to(device)
             batch_loss = model(xs, ys, criterion, device)
-
-            # i = random.randrange(0, len(batch_idx))
-            # print(' '.join(t_vocab_list[t] for t in batch_t_t[i]))
-            # print(' '.join(t_vocab_list[t] if t < len(t_vocab_list) else t_vocab_list[0] for t in pred_seq[i]))
 
             total_loss += batch_loss.item()
             k += len(batch_idx)
@@ -163,11 +160,11 @@ def main():
     if args.model_type == 'EncDec':
         model = models.EncoderDecoder(s_vocab_size=args.vocab_size, t_vocab_size=args.vocab_size,
                                       embed_size=args.embed_size, hidden_size=args.hidden_size,
-                                      weight_decay=1e-5)
+                                      weight_decay=1e-5).to(device)
     elif args.model_type == 'Attn':
         model = models.AttentionSeq2Seq(s_vocab_size=args.vocab_size, t_vocab_size=args.vocab_size,
                                         embed_size=args.embed_size, hidden_size=args.hidden_size,
-                                        num_s_layers=2, bidirectional=True, weight_decay=1e-5)
+                                        num_s_layers=2, bidirectional=True, weight_decay=1e-5).to(device)
     else:
         sys.stderr.write('%s is not found. Model type is `EncDec` or `Attn`.' % args.model_type)
 
