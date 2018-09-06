@@ -24,6 +24,14 @@ class EncoderDecoder(nn.Module):
         self.optim = torch.optim.Adam(self.parameters(), weight_decay=self.weight_decay)
 
     def forward(self, xs, ys, criterion, device):
+        """
+        encoder decoder model
+        :param xs: input tensor, [x_1, x_2, ..., x_m]
+        :param ys: target tensor, [<BOS>, y_1, y_2, ..., y_n]
+        :param criterion: criterion instance
+        :param device: device(cpu or gpu)
+        :return: loss
+        """
         loss = 0
         self.optim.zero_grad()
         batch_size = len(xs)
@@ -47,12 +55,13 @@ class EncoderDecoder(nn.Module):
 
         dhidden = ehs
         pred_seqs = [[] for _ in range(batch_size)]
-        pred_words = torch.tensor([[BOS_token] for _ in range(batch_size)]).to(device)
+        prev_words = torch.tensor([[BOS_token] for _ in range(batch_size)]).to(device)
         for _ in range(max_len):
-            preds, dhidden = self.decoder(pred_words, dhidden)
+            preds, dhidden = self.decoder(prev_words, dhidden)
             _, topi = preds.topk(1)
             for k in range(len(pred_seqs)):
                 pred_seqs[k].append(topi[k])
+            prev_words = torch.tensor([[topi[k]] for k in range(batch_size)]).to(device)
 
             if all(topii == EOS_token for topii in topi):
                 break
