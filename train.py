@@ -31,7 +31,7 @@ def parse():
     parser.add_argument('--batch_size', '-bs', default=200, type=int, help='batch size')
     parser.add_argument('--gpu_id', '-g', default=-1, type=int, help='GPU id you want to use')
     parser.add_argument('--model_prefix', '-mf', default='encdec', help='prefix of model name')
-    parser.add_argument('--model_type', '-mt', default='EncDec', help='Model type(`EncDec` or `Attn`)')
+    parser.add_argument('--model_type', '-mt', default='EncDec', help='Model type (`EncDec` or `Attn`)')
     parser.add_argument('--reverse', '-r', action='store_true', default=False, help='reverse order of input sequences')
 
     args = parser.parse_args()
@@ -85,7 +85,7 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
                     batch_t_s[i] = (batch_t_s[i] + [s_vocab['<EOS>']] * (max_s_len - len(batch_t_s[i])))[::-1]
                 else:
                     batch_t_s[i] = (batch_t_s[i] + [s_vocab['<EOS>']] * (max_s_len - len(batch_t_s[i])))
-                batch_t_t[i] = batch_t_t[i] + [t_vocab['<EOS>']] * (max_t_len - len(batch_t_t[i]))
+                batch_t_t[i] = [t_vocab['<BOS>']] + batch_t_t[i] + [t_vocab['<EOS>']] * (max_t_len - len(batch_t_t[i]))
 
             # 訓練は「入力シーケンス」と「出力シーケンス」を渡すだけ（中で重みの更新までする）
             xs = torch.tensor(batch_t_s).to(device)
@@ -96,10 +96,10 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
             k += len(batch_idx)
             print('\r%d sentences was learned, loss %.4f' % (k, batch_loss.item()), end='')
         print()
-        train_losses.append(total_loss)
+        train_losses.append(total_loss / len(train_srcs))
         dev_loss = dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=reverse)
-        dev_losses.append(dev_loss)
-        print('train loss: %.6f, valid loss: %.6f' % (total_loss, dev_loss))
+        dev_losses.append(dev_loss / len(valid_srcs))
+        print('train loss avg: %.6f, valid loss avg: %.6f' % (total_loss / len(train_srcs), dev_loss / len(valid_srcs)))
     return train_losses, dev_losses
 
 
@@ -117,7 +117,7 @@ def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, revers
                 valid_batch_source.append((valid_srcs[i] + [s_vocab['<EOS>']] * (max_s_len - len(valid_srcs[i])))[::-1])
             else:
                 valid_batch_source.append(valid_srcs[i] + [s_vocab['<EOS>']] * (max_s_len - len(valid_srcs[i])))
-            valid_batch_target.append(valid_tgts[i] + [t_vocab['<EOS>']] * (max_t_len - len(valid_tgts[i])))
+            valid_batch_target.append([t_vocab['<BOS>']] + valid_tgts[i] + [t_vocab['<EOS>']] * (max_t_len - len(valid_tgts[i])))
 
         xs = torch.tensor(valid_batch_source).to(device)
         ys = torch.tensor(valid_batch_target).to(device)
