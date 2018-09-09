@@ -13,10 +13,10 @@ class Encoder(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.e2h = nn.Linear(embed_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers, batch_first=True, bidirectional=bidirectional)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers, bidirectional=bidirectional)
 
     def forward(self, xs, prev_hidden):
-        h = torch.tanh(self.e2h(self.embedding(xs)))  # (batch_size, seq_len) => (batch_size, seq_len, hidden_size)
+        h = torch.tanh(self.e2h(self.embedding(xs)))  # (seq_len, batch_size) => (seq_len, batch_size, embed_size)
         _, hidden = self.gru(h, prev_hidden)
         return hidden
 
@@ -32,7 +32,7 @@ class Decoder(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.e2h = nn.Linear(embed_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers, batch_first=True)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers=num_layers)
         self.h2e = nn.Linear(hidden_size, embed_size)
         self.e2y = nn.Linear(embed_size, vocab_size)
 
@@ -57,7 +57,7 @@ class AttentionDecoder(nn.Module):
         self.e2v = nn.Linear(embed_size, vocab_size)
 
     def forward(self, prev_ys, prev_hidden, ehs):
-        batch_size = prev_ys.size(0)
+        batch_size = prev_ys.size(1)
         h = torch.tanh(self.e2h(self.embedding(prev_ys)))
         out, hidden = self.gru(h, prev_hidden)
         attention_weight = torch.exp(torch.tanh(torch.sum(ehs * hidden, dim=2)))

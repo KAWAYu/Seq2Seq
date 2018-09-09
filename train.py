@@ -88,7 +88,7 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
                 batch_t_t[i] = [t_vocab['<BOS>']] + batch_t_t[i] + [t_vocab['<EOS>']] * (max_t_len - len(batch_t_t[i]))
 
             # 訓練は「入力シーケンス」と「出力シーケンス」を渡すだけ（中で重みの更新までする）
-            xs = torch.tensor(batch_t_s).to(device)
+            xs = torch.tensor(batch_t_s).to(device).t().contiguous()
             ys = torch.tensor(batch_t_t).to(device)
             batch_loss = model(xs, ys, criterion, device)
 
@@ -119,7 +119,7 @@ def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, revers
                 valid_batch_source.append(valid_srcs[i] + [s_vocab['<EOS>']] * (max_s_len - len(valid_srcs[i])))
             valid_batch_target.append([t_vocab['<BOS>']] + valid_tgts[i] + [t_vocab['<EOS>']] * (max_t_len - len(valid_tgts[i])))
 
-        xs = torch.tensor(valid_batch_source).to(device)
+        xs = torch.tensor(valid_batch_source).to(device).t().contiguous()
         ys = torch.tensor(valid_batch_target).to(device)
         batch_loss = model(xs, ys, criterion, device)
 
@@ -168,7 +168,7 @@ def main():
     else:
         sys.stderr.write('%s is not found. Model type is `EncDec` or `Attn`.' % args.model_type)
 
-    if len(args.gpu_id) > 1:
+    if args.gpu_id is not None and len(args.gpu_id) > 1:
         model = torch.nn.DataParallel(model, device_ids=args.gpu_id)
 
     train_losses, valid_losses = train(

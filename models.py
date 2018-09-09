@@ -34,16 +34,16 @@ class EncoderDecoder(nn.Module):
         """
         loss = 0
         self.optim.zero_grad()
-        batch_size = len(xs)
+        batch_size = xs.size(1)
         encoder_init_hidden = self.encoder.init_hidden(batch_size, device)
         ehs = self.encoder(xs, encoder_init_hidden)
 
         dhidden = ehs
         for j in range(len(ys[0]) - 1):
-            prev_words = ys[:, j].view(-1, 1)
+            prev_words = ys[:, j].unsqueeze(0)
             preds, dhidden = self.decoder(prev_words, dhidden)
             _, topi = preds.topk(1)
-            loss += criterion(preds, ys[:, j + 1])
+            loss += criterion(preds.view(-1, self.target_vocab_size), ys[:, j + 1])
         loss.backward()
         self.optim.step()
         return loss
@@ -100,7 +100,7 @@ class AttentionSeq2Seq(nn.Module):
         ehs = self.encoder(xs, encoder_init_hidden)
 
         for j in range(len(ys[0]) - 1):
-            prev_words = ys[:, j].view(-1, 1)
+            prev_words = ys[:, j]
             preds, dhidden = self.attn_decoder(prev_words, dhidden, ehs)
             _, topi = preds.topk(1)
             loss += criterion(preds, ys[:, j + 1])
