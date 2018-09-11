@@ -47,13 +47,13 @@ def translate(src, model, s_vocab, t_vocab, output, device, max_len, reverse=Fal
                     input_sequences[j] = (input_sequences[j] +
                                           [s_vocab['<EOS>']] * (max_s_len - len(input_sequences[j])))
 
-            xs = torch.tensor(input_sequences).to(device)
+            xs = torch.tensor(input_sequences, device=device).t().contiguous()
             pred_seqs = model.predict(xs, device, max_len)
             for pred_seq in pred_seqs:
                 print(' '.join(t_vocab_list[t] if 0 <= t < len(t_vocab_list) else t_vocab_list[0]
                                for t in pred_seq), file=fout)
-            input_sequences = []
-            print('%d sentence translated' % (i + 1))
+            input_sequences
+            print('\r%d sentence translated' % (i + 1), end='')
 
         if input_sequences:
             max_s_len = max(len(s) for s in input_sequences)
@@ -65,12 +65,12 @@ def translate(src, model, s_vocab, t_vocab, output, device, max_len, reverse=Fal
                     input_sequences[j] = (input_sequences[j] +
                                           [s_vocab['<EOS>']] * (max_s_len - len(input_sequences[j])))
 
-            xs = torch.tensor(input_sequences).to(device)
+            xs = torch.tensor(input_sequences, device=device).t().contiguous()
             pred_seqs = model.predict(xs, device, max_len)
             for pred_seq in pred_seqs:
                 print(' '.join(t_vocab_list[t] if 0 <= t < len(t_vocab_list) else t_vocab_list[0]
                                for t in pred_seq), file=fout)
-    print('Translating is finished!')
+    print('\nTranslating is finished!')
 
 
 def main():

@@ -58,7 +58,7 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
 
     criterion = torch.nn.CrossEntropyLoss()  # 損失関数
 
-    # t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
+    t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
     train_losses, dev_losses = [], []
 
     for e in range(1, num_epochs + 1):
@@ -90,24 +90,27 @@ def train(train_srcs, train_tgts, valid_srcs, valid_tgts, model, s_vocab, t_voca
             # 訓練は「入力シーケンス」と「出力シーケンス」を渡すだけ（中で重みの更新までする）
             xs = torch.tensor(batch_t_s).to(device).t().contiguous()
             ys = torch.tensor(batch_t_t).to(device)
-            batch_loss = model(xs, ys, criterion, device)
+            batch_loss, i, seqs = model(xs, ys, criterion, device)
+            # print(' '.join(t_vocab_list[t] for t in batch_t_t[i]))
+            # print(' '.join(t_vocab_list[t] if 0 < t < len(t_vocab_list) else '<UNK>' for t in seqs))
 
             total_loss += batch_loss.item()
             k += len(batch_idx)
             print('\r%d sentences was learned, loss %.4f' % (k, batch_loss.item()), end='')
         print()
         train_losses.append(total_loss / len(train_srcs))
-        dev_loss = dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=reverse)
+        dev_loss = dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=reverse, verbose=2)
         dev_losses.append(dev_loss / len(valid_srcs))
         print('train loss avg: %.6f, valid loss avg: %.6f' % (total_loss / len(train_srcs), dev_loss / len(valid_srcs)))
     return train_losses, dev_losses
 
 
-def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=True):
+def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, reverse=True, verbose=0):
     k = 0
     dev_sum_loss = 0
     criterion = torch.nn.CrossEntropyLoss()
     step_size = 50
+    t_vocab_list = [k for k, _ in sorted(t_vocab.items(), key=lambda x: x[1])]
     while k < len(valid_srcs):
         max_s_len = max(len(s) + 1 for s in valid_srcs[k: min(k + step_size, len(valid_srcs))])
         max_t_len = max(len(s) + 1 for s in valid_tgts[k: min(k + step_size, len(valid_srcs))])
@@ -121,10 +124,12 @@ def dev_evaluate(valid_srcs, valid_tgts, model, s_vocab, t_vocab, device, revers
 
         xs = torch.tensor(valid_batch_source).to(device).t().contiguous()
         ys = torch.tensor(valid_batch_target).to(device)
-        batch_loss = model(xs, ys, criterion, device)
+        batch_loss, i, seqs = model(xs, ys, criterion, device)
 
         dev_sum_loss += batch_loss.item()
         k += step_size
+    if verbose > 1:
+        print(' '.join(t_vocab_list[t] if 0 < t < len(t_vocab_list) else '<UNK>' for t in seqs))
     return dev_sum_loss
 
 
@@ -184,6 +189,7 @@ def main():
     plt.plot(np.array([i for i in range(1, len(valid_losses) + 1)]), valid_losses, label='valid loss')
     plt.xlabel('Epochs')
     plt.ylabel('loss')
+    plt.legend()
     plt.tight_layout()
     plt.savefig('loss_curve.pdf')
 

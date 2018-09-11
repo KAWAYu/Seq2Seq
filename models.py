@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
+import random
 import torch
 import torch.nn as nn
 
 import nn_blocks
+
 
 
 class EncoderDecoder(nn.Module):
@@ -36,7 +38,7 @@ class EncoderDecoder(nn.Module):
         self.optim.zero_grad()
         batch_size = xs.size(1)
         encoder_init_hidden = self.encoder.init_hidden(batch_size, device)
-        ehs = self.encoder(xs, encoder_init_hidden)
+        _, ehs = self.encoder(xs, encoder_init_hidden)
 
         dhidden = ehs
         for j in range(len(ys[0]) - 1):
@@ -49,19 +51,19 @@ class EncoderDecoder(nn.Module):
         return loss
 
     def predict(self, xs, device, max_len, BOS_token=2, EOS_token=1):
-        batch_size = len(xs)
+        batch_size = xs.size(1)
         encoder_init_hidden = self.encoder.init_hidden(batch_size, device)
-        ehs = self.encoder(xs, encoder_init_hidden)
+        _, ehs = self.encoder(xs, encoder_init_hidden)
 
         dhidden = ehs
         pred_seqs = [[] for _ in range(batch_size)]
-        prev_words = torch.tensor([[BOS_token] for _ in range(batch_size)]).to(device)
+        prev_words = torch.tensor([[BOS_token for _ in range(batch_size)]], device=device)
         for _ in range(max_len):
             preds, dhidden = self.decoder(prev_words, dhidden)
             _, topi = preds.topk(1)
             for k in range(len(pred_seqs)):
                 pred_seqs[k].append(topi[k])
-            prev_words = torch.tensor([[topi[k]] for k in range(batch_size)]).to(device)
+            prev_words = topi.view(1, -1).detach()
 
             if all(topii == EOS_token for topii in topi):
                 break
@@ -93,38 +95,42 @@ class AttentionSeq2Seq(nn.Module):
         loss = 0
         self.optim.zero_grad()
 
-        batch_size = len(xs)
+        batch_size = xs.size(1)
         encoder_init_hidden = self.encoder.init_hidden(batch_size, device)
         dhidden = self.attn_decoder.init_hidden(batch_size, device)
 
-        ehs = self.encoder(xs, encoder_init_hidden)
+        ehs, _ = self.encoder(xs, encoder_init_hidden)
 
+        i = random.randrange(0, batch_size)
+        seqs = []
         for j in range(len(ys[0]) - 1):
-            prev_words = ys[:, j]
+            prev_words = ys[:, j].unsqueeze(0).to(device)
             preds, dhidden = self.attn_decoder(prev_words, dhidden, ehs)
             _, topi = preds.topk(1)
+            seqs.append(topi[i].item())
             loss += criterion(preds, ys[:, j + 1])
         loss.backward()
         self.optim.step()
-        return loss
+        return loss, i, seqs
 
     def predict(self, xs, device, max_len, BOS_token=2, EOS_token=1):
-        batch_size = len(xs)
+        batch_size = xs.size(1)
         encoder_init_hidden = self.encoder.init_hidden(batch_size, device)
-        ehs = self.encoder(xs, encoder_init_hidden)
+        ehs, _ = self.encoder(xs, encoder_init_hidden)
 
         dhidden = self.attn_decoder.init_hidden(batch_size, device)
-        pred_words = torch.tensor([[BOS_token] for _ in range(batch_size)]).to(device)
+        prev_words = torch.tensor([[BOS_token for _ in range(batch_size)]], device=device)
         pred_seqs = [[] for _ in range(batch_size)]
 
         for _ in range(max_len):
-            preds, dhidden = self.attn_decoder(pred_words, dhidden, ehs)
+            preds, dhidden = self.attn_decoder(prev_words, dhidden, ehs)
             _, topi = preds.topk(1)
             for k in range(len(pred_seqs)):
                 pred_seqs[k].append(topi[k])
 
             if all(topii == EOS_token for topii in topi):
                 break
+            prev_words = topi.view(1, -1).detach()
         _pred_seqs = [pred_seq[:pred_seq.index(EOS_token)] if EOS_token in pred_seq
                       else pred_seq for pred_seq in pred_seqs]
         return _pred_seqs
